@@ -40,6 +40,7 @@ func (s *service) CreateTask(ctx context.Context, req CreateTaskRequest) error {
 		UserID:      req.UserID,
 		Title:       req.Title,
 		Description: req.Description,
+		Project:     req.Project,
 		Status:      entity.TaskStatus(req.Status),
 		Date:        date,
 		EffortTime:  req.EffortTime,
@@ -75,6 +76,7 @@ func (s *service) UpdateTask(ctx context.Context, id int, userID int, req Update
 
 	existing.Title = req.Title
 	existing.Description = req.Description
+	existing.Project = req.Project
 	existing.Status = entity.TaskStatus(req.Status)
 	existing.Date = date
 	existing.EffortTime = req.EffortTime

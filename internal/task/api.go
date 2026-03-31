@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/adesepriansyah/task-list-timesheet-be/internal/auth"
 	"github.com/adesepriansyah/task-list-timesheet-be/internal/repository"
 	"github.com/go-chi/chi/v5"
 )
@@ -14,10 +15,11 @@ type resource struct {
 }
 
 // RegisterHandlers registers the task handlers.
-func RegisterHandlers(r chi.Router, service Service) {
+func RegisterHandlers(r chi.Router, service Service, jwtSecret []byte) {
 	res := &resource{service}
 
 	r.Route("/api/tasks", func(r chi.Router) {
+		r.Use(auth.JWTMiddleware(jwtSecret))
 		r.Post("/", res.create)
 		r.Get("/", res.list)
 		r.Put("/{id}", res.update)
@@ -26,11 +28,14 @@ func RegisterHandlers(r chi.Router, service Service) {
 }
 
 func (res *resource) create(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.UserIDFromContext(r.Context())
+
 	var req CreateTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
+	req.UserID = userID
 
 	if err := res.service.CreateTask(r.Context(), req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -39,23 +44,13 @@ func (res *resource) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"data": "Ok"})
 }
 
 func (res *resource) list(w http.ResponseWriter, r *http.Request) {
-	userIDStr := r.URL.Query().Get("user_id")
-	if userIDStr == "" {
-		http.Error(w, "user_id is required", http.StatusBadRequest)
-		return
-	}
-
-	userID, err := strconv.Atoi(userIDStr)
-	if err != nil {
-		http.Error(w, "invalid user_id", http.StatusBadRequest)
-		return
-	}
+	userID, _ := auth.UserIDFromContext(r.Context())
 
 	filter := repository.TaskFilter{
 		UserID:   userID,
@@ -82,13 +77,16 @@ func (res *resource) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, _ := auth.UserIDFromContext(r.Context())
+
 	var req UpdateTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
+	req.UserID = userID
 
-	if err := res.service.UpdateTask(r.Context(), id, req.UserID, req); err != nil {
+	if err := res.service.UpdateTask(r.Context(), id, userID, req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
