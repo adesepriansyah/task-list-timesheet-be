@@ -1,4 +1,0 @@
-server:
-  port: 8080
-db:
-  dsn: "postgres://postgres:postgres@localhost:5433/taskdb?sslmode=disable"
