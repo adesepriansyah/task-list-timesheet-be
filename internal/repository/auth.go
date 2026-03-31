@@ -11,6 +11,8 @@ import (
 // AuthRepository interface for auth operations.
 type AuthRepository interface {
 	FindUserByEmail(ctx context.Context, email string) (*entity.User, error)
+	CreateUser(ctx context.Context, name, email, hashedPassword string) error
+	FindUserByID(ctx context.Context, id int) (*entity.User, error)
 	CreateToken(ctx context.Context, userID int, token string, expiredAt time.Time) error
 	DeleteToken(ctx context.Context, token string) error
 	FindToken(ctx context.Context, token string) (*entity.UserToken, error)
@@ -27,8 +29,27 @@ func NewAuthRepository(db *sql.DB) AuthRepository {
 
 func (r *authRepository) FindUserByEmail(ctx context.Context, email string) (*entity.User, error) {
 	var user entity.User
-	query := `SELECT id, email, password, created_at, updated_at FROM users WHERE email = $1`
-	err := r.db.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.Password, &user.CreatedAt, &user.UpdatedAt)
+	query := `SELECT id, name, email, password, created_at, updated_at FROM users WHERE email = $1`
+	err := r.db.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Name, &user.Email, &user.Password, &user.CreatedAt, &user.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *authRepository) CreateUser(ctx context.Context, name, email, hashedPassword string) error {
+	query := `INSERT INTO users (name, email, password) VALUES ($1, $2, $3)`
+	_, err := r.db.ExecContext(ctx, query, name, email, hashedPassword)
+	return err
+}
+
+func (r *authRepository) FindUserByID(ctx context.Context, id int) (*entity.User, error) {
+	var user entity.User
+	query := `SELECT id, name, email, created_at, updated_at FROM users WHERE id = $1`
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&user.ID, &user.Name, &user.Email, &user.CreatedAt, &user.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

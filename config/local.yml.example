@@ -1,0 +1,6 @@
+server:
+  port: 8080
+db:
+  # Connection string for PostgreSQL
+  # Example: "postgres://postgres:postgres@localhost:5433/taskdb?sslmode=disable"
+  dsn: "postgres://user:password@localhost:port/dbname?sslmode=disable"

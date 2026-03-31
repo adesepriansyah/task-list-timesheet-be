@@ -44,8 +44,9 @@ response body (Success) :
     "email":"email",
     "expired_token":
 }
+}
 
-untuk struktur folder login ada di folder auth berisi (router,service) 
+untuk struktur folder register dan get user info ada di folder auth berisi (router,service) 
 
 untuk entity(berisi variabel tabel)
 
