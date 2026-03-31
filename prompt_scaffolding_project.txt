@@ -1,0 +1,56 @@
+buatkan issue.md yang berisi perencanaan untuk nanti diimplementasikan oleh junior programing atau ai model yang lebih murah 
+
+
+isi dari perencanaannya sebagai berikut :
+
+
+buatkan api untuk register and get user - info
+
+tambahkan kolom name di tabel users
+
+
+Endpoint : Post /api/users/register
+
+request body :
+{
+  "name":"name",
+  "email":"email",
+  "password":"password"
+}
+
+response body (Success) :
+
+
+{
+  "data":"Ok"
+}
+
+resposen error : 
+
+{
+  "error":"Unauthorized"
+}
+
+Endpoint : Get user info 
+
+Headers :
+-Authorization: Brear <token> (token adalan token yang ada di tabels users)
+
+response body (Success) :
+{
+  "data":{
+    "id":1,
+    "name":"name",
+    "email":"email",
+    "expired_token":
+}
+
+untuk struktur folder login ada di folder auth berisi (router,service) 
+
+untuk entity(berisi variabel tabel)
+
+untuk repository(berisi query ke database)
+
+
+
+jelaskan tahapan-tahapan yang harus dilakukan untuk mengimplementasikan fitur ini , anggap nanti yang mengimplementasikan adalah junior programer atau model ai yang lebih murah
