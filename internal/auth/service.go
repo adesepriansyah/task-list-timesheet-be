@@ -2,13 +2,12 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"time"
 
 	"github.com/adesepriansyah/task-list-timesheet-be/internal/entity"
 	authRepo "github.com/adesepriansyah/task-list-timesheet-be/internal/repository"
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -21,12 +20,13 @@ type Service interface {
 }
 
 type service struct {
-	repo authRepo.AuthRepository
+	repo      authRepo.AuthRepository
+	jwtSecret []byte
 }
 
 // NewService creates a new auth service.
-func NewService(repo authRepo.AuthRepository) Service {
-	return &service{repo}
+func NewService(repo authRepo.AuthRepository, jwtSecret string) Service {
+	return &service{repo, []byte(jwtSecret)}
 }
 
 func (s *service) Login(ctx context.Context, email, password string) (string, error) {
@@ -43,20 +43,23 @@ func (s *service) Login(ctx context.Context, email, password string) (string, er
 		return "", errors.New("unauthorized")
 	}
 
-	// Generate token
-	token, err := generateRandomToken(32)
+	// Generate token (JWT)
+	expiredAt := time.Now().Add(24 * time.Hour)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": user.ID,
+		"exp": expiredAt.Unix(),
+	})
+
+	tokenString, err := token.SignedString(s.jwtSecret)
 	if err != nil {
 		return "", err
 	}
 
-	// Set expiration (e.g., 24 hours)
-	expiredAt := time.Now().Add(24 * time.Hour)
-
-	if err := s.repo.CreateToken(ctx, user.ID, token, expiredAt); err != nil {
+	if err := s.repo.CreateToken(ctx, user.ID, tokenString, expiredAt); err != nil {
 		return "", err
 	}
 
-	return token, nil
+	return tokenString, nil
 }
 
 func (s *service) Logout(ctx context.Context, token string) error {
@@ -82,37 +85,36 @@ func (s *service) Register(ctx context.Context, name, email, password string) er
 	return s.repo.CreateUser(ctx, name, email, string(hashedPassword))
 }
 
-func (s *service) GetUserInfo(ctx context.Context, token string) (*entity.User, time.Time, error) {
-	// Find and validate token
-	userToken, err := s.repo.FindToken(ctx, token)
-	if err != nil {
-		return nil, time.Time{}, err
-	}
-	if userToken == nil {
+func (s *service) GetUserInfo(ctx context.Context, tokenString string) (*entity.User, time.Time, error) {
+	// 1. Parse and validate JWT signature
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return s.jwtSecret, nil
+	})
+
+	if err != nil || !token.Valid {
 		return nil, time.Time{}, errors.New("unauthorized")
 	}
 
-	// Check if token is expired
-	if time.Now().After(userToken.ExpiredAt) {
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
 		return nil, time.Time{}, errors.New("unauthorized")
 	}
 
-	// Get user info
-	user, err := s.repo.FindUserByID(ctx, userToken.UserID)
-	if err != nil {
-		return nil, time.Time{}, err
+	// 2. Double check with DB (for revocation/logout)
+	userToken, err := s.repo.FindToken(ctx, tokenString)
+	if err != nil || userToken == nil {
+		return nil, time.Time{}, errors.New("unauthorized")
 	}
-	if user == nil {
+
+	// 3. Get user info
+	userID := int(claims["sub"].(float64))
+	user, err := s.repo.FindUserByID(ctx, userID)
+	if err != nil || user == nil {
 		return nil, time.Time{}, errors.New("unauthorized")
 	}
 
 	return user, userToken.ExpiredAt, nil
-}
-
-func generateRandomToken(length int) (string, error) {
-	b := make([]byte, length)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
 }
