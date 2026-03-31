@@ -10,6 +10,7 @@ import (
 	"github.com/adesepriansyah/task-list-timesheet-be/internal/config"
 	"github.com/adesepriansyah/task-list-timesheet-be/internal/healthcheck"
 	"github.com/adesepriansyah/task-list-timesheet-be/internal/repository"
+	"github.com/adesepriansyah/task-list-timesheet-be/internal/task"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	_ "github.com/lib/pq"
@@ -46,6 +47,9 @@ func main() {
 	authRepo := repository.NewAuthRepository(db)
 	authService := auth.NewService(authRepo)
 
+	taskRepo := repository.NewTaskRepository(db)
+	taskService := task.NewService(taskRepo)
+
 	// Setup router
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -54,6 +58,7 @@ func main() {
 	// Register handlers
 	healthcheck.RegisterHandlers(r)
 	auth.RegisterHandlers(r, authService)
+	task.RegisterHandlers(r, taskService)
 
 	// Start server
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)

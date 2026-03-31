@@ -115,3 +115,35 @@ curl -i -X POST http://localhost:8080/api/users/login \
   "error": "Unauthorized"
 }
 ```
+
+## 7. Test Task CRUD
+
+Pastikan Anda sudah login dan memiliki `user_id`.
+
+### A. Create Task
+```bash
+curl -i -X POST http://localhost:8080/api/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Belajar Go", "description":"Belajar dasar-dasar Go", "status":"pending", "user_id":1, "date":"2026-04-01", "effort_time":60}'
+```
+
+### B. List Tasks (dengan Filter)
+```bash
+# List semua task untuk user 1
+curl -i -X GET "http://localhost:8080/api/tasks?user_id=1"
+
+# List dengan filter search dan tanggal
+curl -i -X GET "http://localhost:8080/api/tasks?user_id=1&search=belajar&date_from=2026-04-01&date_to=2026-04-30"
+```
+
+### C. Update Task
+```bash
+curl -i -X PUT http://localhost:8080/api/tasks/1 \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Belajar Go Lanjutan", "description":"Belajar dasar Go dengan project", "status":"in_progress", "user_id":1, "date":"2026-04-01", "effort_time":120}'
+```
+
+### D. Delete Task
+```bash
+curl -i -X DELETE http://localhost:8080/api/tasks/1
+```
