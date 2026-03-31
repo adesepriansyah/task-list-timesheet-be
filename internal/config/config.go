@@ -14,6 +14,9 @@ type Config struct {
 	DB struct {
 		DSN string `yaml:"dsn"`
 	} `yaml:"db"`
+	JWT struct {
+		Secret string `yaml:"secret"`
+	} `yaml:"jwt"`
 }
 
 // Load loads the configuration from the given path.

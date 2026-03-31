@@ -45,7 +45,7 @@ func main() {
 
 	// Setup layers
 	authRepo := repository.NewAuthRepository(db)
-	authService := auth.NewService(authRepo)
+	authService := auth.NewService(authRepo, cfg.JWT.Secret)
 
 	taskRepo := repository.NewTaskRepository(db)
 	taskService := task.NewService(taskRepo)
