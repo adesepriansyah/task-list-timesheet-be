@@ -4,18 +4,25 @@ buatkan issue.md yang berisi perencanaan untuk nanti diimplementasikan oleh juni
 isi dari perencanaannya sebagai berikut :
 
 
-buatkan api untuk register and get user - info
+buatkan CRUD api untuk tasks
 
 tambahkan kolom name di tabel users
 
+untum POST dan update (tambahkan filter id tasks)
 
-Endpoint : Post /api/users/register
 
 request body :
 {
-  "name":"name",
-  "email":"email",
-  "password":"password"
+  "title":"title",
+  "description":"description",
+  "status":"status",
+  "user_id":"user_id"
+  "description":"description"
+  "date":"date"
+  "effort_time":"effort_time"
+  "created_at":"created_at",
+  "updated_at":"updated_at"
+
 }
 
 response body (Success) :
@@ -31,27 +38,19 @@ resposen error :
   "error":"Unauthorized"
 }
 
-Endpoint : Get user info 
+untuk get list 
 
-Headers :
--Authorization: Brear <token> (token adalan token yang ada di tabels users)
+buatkan filter search (title dan description) dan range date(dari kolom date) dan user_id (required)
 
-response body (Success) :
-{
-  "data":{
-    "id":1,
-    "name":"name",
-    "email":"email",
-    "expired_token":
-}
-}
+response semua kolom
 
-untuk struktur folder register dan get user info ada di folder auth berisi (router,service) 
+untuk endpoint delete
+
+untuk struktur folder tasks (router,service) 
 
 untuk entity(berisi variabel tabel)
 
 untuk repository(berisi query ke database)
-
 
 
 jelaskan tahapan-tahapan yang harus dilakukan untuk mengimplementasikan fitur ini , anggap nanti yang mengimplementasikan adalah junior programer atau model ai yang lebih murah

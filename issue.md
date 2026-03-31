@@ -1,25 +1,44 @@
-# Issue: Implementasi API Register & Get User Info
+# Issue: Implementasi CRUD API untuk Tasks
 
 ## Deskripsi
 
-Menambahkan dua endpoint baru pada modul `auth`:
-1. **Register** — Membuat user baru.
-2. **Get User Info** — Mengambil informasi user yang sedang login berdasarkan token.
+Membuat modul Tasks lengkap dengan endpoint CRUD (Create, Read, Update, Delete) untuk mengelola data tugas (task). Modul ini mengikuti pola Clean Architecture yang sudah ada di proyek (lihat modul `auth` sebagai referensi).
 
-Fitur ini juga memerlukan penambahan kolom `name` pada tabel `users`.
+---
+
+## Tabel `tasks` (Sudah Ada)
+
+Tabel ini sudah dibuat di migration `0001_initial.up.sql`:
+
+| Kolom       | Tipe         | Keterangan                                |
+|-------------|--------------|-------------------------------------------|
+| id          | SERIAL       | Primary Key, auto increment               |
+| user_id     | INT          | Foreign key ke tabel `users`              |
+| title       | VARCHAR(255) | Judul task                                |
+| description | TEXT         | Deskripsi task                            |
+| status      | VARCHAR(50)  | `pending`, `in_progress`, `completed`     |
+| date        | DATE         | Tanggal task                              |
+| effort_time | INT          | Estimasi waktu (dalam menit)              |
+| created_at  | TIMESTAMP    | Waktu dibuat                              |
+| updated_at  | TIMESTAMP    | Waktu terakhir diperbarui                 |
+
+> **Note**: Entity `Task` sudah ada di `internal/entity/task.go`.
 
 ---
 
 ## Endpoint
 
-### 1. `POST /api/users/register`
+### 1. `POST /api/tasks` — Create Task
 
 **Request Body:**
 ```json
 {
-  "name": "name",
-  "email": "email",
-  "password": "password"
+  "title": "Belajar Go",
+  "description": "Belajar dasar-dasar Go",
+  "status": "pending",
+  "user_id": 1,
+  "date": "2026-04-01",
+  "effort_time": 60
 }
 ```
 
@@ -30,38 +49,80 @@ Fitur ini juga memerlukan penambahan kolom `name` pada tabel `users`.
 }
 ```
 
-**Response Error (400 - email sudah terdaftar):**
+**Response Error (400):**
 ```json
 {
-  "error": "Email already registered"
+  "error": "Bad Request"
 }
 ```
 
 ---
 
-### 2. `GET /api/users/info`
+### 2. `GET /api/tasks` — Get Task List (dengan Filter)
 
-**Headers:**
+**Query Parameters (filter):**
+| Parameter   | Tipe   | Wajib? | Keterangan                              |
+|-------------|--------|--------|-----------------------------------------|
+| user_id     | int    | ✅ Ya  | Filter berdasarkan user                 |
+| search      | string | Tidak  | Pencarian di kolom `title` & `description` |
+| date_from   | string | Tidak  | Batas awal range tanggal (format: `YYYY-MM-DD`) |
+| date_to     | string | Tidak  | Batas akhir range tanggal (format: `YYYY-MM-DD`) |
+
+**Contoh Request:**
 ```
-Authorization: Bearer <token>
+GET /api/tasks?user_id=1&search=belajar&date_from=2026-04-01&date_to=2026-04-30
 ```
 
 **Response Success (200):**
 ```json
 {
-  "data": {
-    "id": 1,
-    "name": "name",
-    "email": "email",
-    "expired_token": "2026-04-01T00:00:00Z"
-  }
+  "data": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "title": "Belajar Go",
+      "description": "Belajar dasar-dasar Go",
+      "status": "pending",
+      "date": "2026-04-01",
+      "effort_time": 60,
+      "created_at": "2026-04-01T00:00:00Z",
+      "updated_at": "2026-04-01T00:00:00Z"
+    }
+  ]
 }
 ```
 
-**Response Error (401 - token tidak valid / expired):**
+---
+
+### 3. `PUT /api/tasks/{id}` — Update Task
+
+**Request Body (sama seperti create):**
 ```json
 {
-  "error": "Unauthorized"
+  "title": "Belajar Go Lanjutan",
+  "description": "Belajar Go dengan project",
+  "status": "in_progress",
+  "user_id": 1,
+  "date": "2026-04-02",
+  "effort_time": 120
+}
+```
+
+**Response Success (200):**
+```json
+{
+  "data": "Ok"
+}
+```
+
+---
+
+### 4. `DELETE /api/tasks/{id}` — Delete Task
+
+**Response Success (200):**
+```json
+{
+  "data": "Ok"
 }
 ```
 
@@ -69,139 +130,170 @@ Authorization: Bearer <token>
 
 ## Tahapan Implementasi
 
-### Tahap 1: Database Migration
+### Tahap 1: Buat Folder & File Baru untuk Modul Task
 
-Buat file migration baru `migrations/0002_add_name_to_users.up.sql`:
-```sql
-ALTER TABLE users ADD COLUMN name VARCHAR(255) NOT NULL DEFAULT '';
+Buat struktur folder baru:
+```
+internal/
+  task/
+    api.go        ← handler HTTP (router + handler functions)
+    service.go    ← interface Service + implementasi logic
+    request.go    ← struct request body
 ```
 
-Jalankan migration ke database:
-```bash
-cat migrations/0002_add_name_to_users.up.sql | docker exec -i task-list-timesheet-be-db-1 psql -U postgres -d taskdb
-```
+> **Referensi**: Lihat folder `internal/auth/` sebagai contoh pola yang harus diikuti.
 
 ---
 
-### Tahap 2: Update Entity
+### Tahap 2: Buat Repository
 
-Edit file `internal/entity/user.go`, tambahkan field `Name`:
+Edit file `internal/repository/task.go` (file baru):
+
+1. **Buat interface `TaskRepository`** dengan method:
+   ```go
+   type TaskRepository interface {
+       Create(ctx context.Context, task *entity.Task) error
+       FindByID(ctx context.Context, id int) (*entity.Task, error)
+       FindAll(ctx context.Context, filter TaskFilter) ([]entity.Task, error)
+       Update(ctx context.Context, task *entity.Task) error
+       Delete(ctx context.Context, id int) error
+   }
+   ```
+
+2. **Buat struct `TaskFilter`** untuk filter pencarian:
+   ```go
+   type TaskFilter struct {
+       UserID   int
+       Search   string    // pencarian di title & description (ILIKE '%search%')
+       DateFrom string    // format: YYYY-MM-DD
+       DateTo   string    // format: YYYY-MM-DD
+   }
+   ```
+
+3. **Implementasi setiap method:**
+   - `Create`: `INSERT INTO tasks (user_id, title, description, status, date, effort_time) VALUES ($1, $2, $3, $4, $5, $6)`
+   - `FindByID`: `SELECT * FROM tasks WHERE id = $1`
+   - `FindAll`: `SELECT * FROM tasks WHERE user_id = $1` + tambahkan kondisi filter secara dinamis:
+     - Jika `Search` tidak kosong: `AND (title ILIKE '%search%' OR description ILIKE '%search%')`
+     - Jika `DateFrom` tidak kosong: `AND date >= $N`
+     - Jika `DateTo` tidak kosong: `AND date <= $N`
+   - `Update`: `UPDATE tasks SET title=$1, description=$2, status=$3, date=$4, effort_time=$5, updated_at=NOW() WHERE id=$6`
+   - `Delete`: `DELETE FROM tasks WHERE id = $1`
+
+---
+
+### Tahap 3: Buat Service
+
+Buat file `internal/task/service.go`:
+
+1. **Buat interface `Service`:**
+   ```go
+   type Service interface {
+       CreateTask(ctx context.Context, req CreateTaskRequest) error
+       GetTasks(ctx context.Context, filter repository.TaskFilter) ([]entity.Task, error)
+       UpdateTask(ctx context.Context, id int, req UpdateTaskRequest) error
+       DeleteTask(ctx context.Context, id int) error
+   }
+   ```
+
+2. **Implementasi:**
+   - `CreateTask`: Validasi input, lalu panggil `repo.Create()`.
+   - `GetTasks`: Panggil `repo.FindAll()` dengan filter dari query parameter.
+   - `UpdateTask`: Cek apakah task ada via `repo.FindByID()`, lalu panggil `repo.Update()`.
+   - `DeleteTask`: Panggil `repo.Delete()`.
+
+---
+
+### Tahap 4: Buat Request Struct
+
+Buat file `internal/task/request.go`:
 ```go
-type User struct {
-    ID        int       `json:"id" db:"id"`
-    Name      string    `json:"name" db:"name"`        // <-- TAMBAHKAN INI
-    Email     string    `json:"email" db:"email"`
-    Password  string    `json:"-" db:"password"`
-    CreatedAt time.Time `json:"created_at" db:"created_at"`
-    UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+type CreateTaskRequest struct {
+    Title       string `json:"title"`
+    Description string `json:"description"`
+    Status      string `json:"status"`
+    UserID      int    `json:"user_id"`
+    Date        string `json:"date"`        // format: YYYY-MM-DD
+    EffortTime  int    `json:"effort_time"`
+}
+
+type UpdateTaskRequest struct {
+    Title       string `json:"title"`
+    Description string `json:"description"`
+    Status      string `json:"status"`
+    UserID      int    `json:"user_id"`
+    Date        string `json:"date"`
+    EffortTime  int    `json:"effort_time"`
 }
 ```
 
 ---
 
-### Tahap 3: Update Repository
+### Tahap 5: Buat API Handler
 
-Edit file `internal/repository/auth.go`:
+Buat file `internal/task/api.go`:
 
-1. **Tambahkan method baru ke interface `AuthRepository`:**
+1. **Daftarkan route di `RegisterHandlers`:**
    ```go
-   CreateUser(ctx context.Context, name, email, hashedPassword string) error
-   FindUserByID(ctx context.Context, id int) (*entity.User, error)
+   func RegisterHandlers(r chi.Router, service Service) {
+       res := &resource{service}
+       r.Route("/api/tasks", func(r chi.Router) {
+           r.Post("/", res.create)
+           r.Get("/", res.list)
+           r.Put("/{id}", res.update)
+           r.Delete("/{id}", res.delete)
+       })
+   }
    ```
 
-2. **Implementasikan kedua method tersebut:**
-   - `CreateUser`: Jalankan query `INSERT INTO users (name, email, password) VALUES ($1, $2, $3)`.
-   - `FindUserByID`: Jalankan query `SELECT id, name, email, created_at, updated_at FROM users WHERE id = $1`.
+2. **Implementasi handler:**
+   - `create`: Decode JSON body → panggil `service.CreateTask()` → return 201.
+   - `list`: Ambil query params (`user_id`, `search`, `date_from`, `date_to`) → panggil `service.GetTasks()` → return 200 dengan list.
+   - `update`: Ambil `{id}` dari URL + JSON body → panggil `service.UpdateTask()` → return 200.
+   - `delete`: Ambil `{id}` dari URL → panggil `service.DeleteTask()` → return 200.
 
-3. **Update query `FindUserByEmail`** agar juga mengambil kolom `name`:
-   ```sql
-   SELECT id, name, email, password, created_at, updated_at FROM users WHERE email = $1
-   ```
-   dan tambahkan `&user.Name` pada `.Scan(...)`.
+   > Untuk mengambil `{id}` dari URL, gunakan: `chi.URLParam(r, "id")` lalu konversi ke `int` dengan `strconv.Atoi()`.
 
 ---
 
-### Tahap 4: Update Service
+### Tahap 6: Wiring di `main.go`
 
-Edit file `internal/auth/service.go`:
+Edit `cmd/server/main.go`:
 
-1. **Tambahkan method baru ke interface `Service`:**
+1. Import paket `task`:
    ```go
-   Register(ctx context.Context, name, email, password string) error
-   GetUserInfo(ctx context.Context, token string) (*entity.User, time.Time, error)
+   "github.com/adesepriansyah/task-list-timesheet-be/internal/task"
    ```
 
-2. **Implementasi `Register`:**
-   - Cek apakah email sudah terdaftar via `repo.FindUserByEmail()`.
-   - Jika sudah ada, return error `"email already registered"`.
-   - Hash password menggunakan `bcrypt.GenerateFromPassword()`.
-   - Simpan user baru via `repo.CreateUser()`.
-
-3. **Implementasi `GetUserInfo`:**
-   - Cari token di database via `repo.FindToken()`.
-   - Jika token tidak ditemukan atau sudah expired, return error `"unauthorized"`.
-   - Ambil data user via `repo.FindUserByID()` menggunakan `userToken.UserID`.
-   - Return data user dan `expiredAt` dari token.
-
----
-
-### Tahap 5: Update Request Struct
-
-Edit file `internal/auth/request.go`, tambahkan struct baru:
-```go
-type registerRequest struct {
-    Name     string `json:"name"`
-    Email    string `json:"email"`
-    Password string `json:"password"`
-}
-```
-
----
-
-### Tahap 6: Update API Handler
-
-Edit file `internal/auth/api.go`:
-
-1. **Tambahkan route baru di `RegisterHandlers`:**
+2. Inisialisasi layer:
    ```go
-   r.Post("/register", res.register)
-   r.Get("/info", res.getUserInfo)
+   taskRepo := repository.NewTaskRepository(db)
+   taskService := task.NewService(taskRepo)
    ```
 
-2. **Buat handler `register`:**
-   - Decode request body ke `registerRequest`.
-   - Panggil `service.Register(ctx, req.Name, req.Email, req.Password)`.
-   - Jika error `"email already registered"`, return 400.
-   - Jika sukses, return `{"data": "Ok"}`.
-
-3. **Buat handler `getUserInfo`:**
-   - Ambil token dari header `Authorization: Bearer <token>`.
-   - Panggil `service.GetUserInfo(ctx, token)`.
-   - Jika error `"unauthorized"`, return 401.
-   - Jika sukses, return:
-     ```json
-     {
-       "data": {
-         "id": 1,
-         "name": "name",
-         "email": "email",
-         "expired_token": "2026-04-01T00:00:00Z"
-       }
-     }
-     ```
+3. Daftarkan handler:
+   ```go
+   task.RegisterHandlers(r, taskService)
+   ```
 
 ---
 
 ### Tahap 7: Testing
 
-1. **Unit Test**: Tambahkan test case untuk `Register` dan `GetUserInfo` di `internal/auth/service_test.go`.
-2. **Manual Test**: Gunakan `curl` untuk menguji endpoint baru (lihat contoh di `api_testing.md`).
+1. **Unit Test**: Buat `internal/task/service_test.go` dengan mock repository.
+2. **Manual Test**: Gunakan `curl` untuk menguji semua endpoint:
+   - `POST /api/tasks` → buat task baru.
+   - `GET /api/tasks?user_id=1` → list task berdasarkan user.
+   - `GET /api/tasks?user_id=1&search=belajar` → pencarian berdasarkan judul/deskripsi.
+   - `PUT /api/tasks/1` → update task.
+   - `DELETE /api/tasks/1` → hapus task.
 
 ---
 
 ## Catatan Penting
 
-- Password harus di-hash menggunakan `bcrypt` sebelum disimpan ke database.
-- Token diambil dari header `Authorization: Bearer <token>`.
-- Gunakan `time.Now()` untuk mengecek apakah token sudah expired.
-- Pastikan semua query yang mengambil data `users` sudah menyertakan kolom `name`.
+- **Semua endpoint menggunakan JSON** untuk request dan response body.
+- **`user_id` wajib** pada endpoint `GET /api/tasks` (sebagai query parameter).
+- **Status hanya boleh**: `pending`, `in_progress`, `completed` (validasi di service layer).
+- **Filter pencarian** menggunakan `ILIKE` untuk case-insensitive search.
+- **Ikuti pola Clean Architecture** yang sudah ada di modul `auth` (lihat file-file di `internal/auth/` dan `internal/repository/`).
