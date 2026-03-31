@@ -1,177 +1,207 @@
-# Implementasi Database Schema & Auth API (Login/Logout)
+# Issue: Implementasi API Register & Get User Info
 
 ## Deskripsi
-Implementasi skema database untuk tabel `user`, `user_token`, dan `task`, serta API untuk fitur **Login** dan **Logout** user.
 
-Dokumen ini adalah panduan step-by-step. Ikuti setiap tahapan secara berurutan.
+Menambahkan dua endpoint baru pada modul `auth`:
+1. **Register** — Membuat user baru.
+2. **Get User Info** — Mengambil informasi user yang sedang login berdasarkan token.
 
----
-
-## 1. Database Schema (Migration)
-
-Buat file migration di folder `migrations/`. Buat tiga tabel berikut:
-
-### Tabel `users`
-| Kolom        | Tipe        | Keterangan          |
-|-------------|-------------|---------------------|
-| id          | SERIAL (PK) | Auto increment      |
-| email       | VARCHAR     | Unique, not null    |
-| password    | VARCHAR     | Hashed, not null    |
-| created_at  | TIMESTAMP   | Default NOW()       |
-| updated_at  | TIMESTAMP   | Default NOW()       |
-
-### Tabel `user_tokens`
-| Kolom        | Tipe        | Keterangan                       |
-|-------------|-------------|----------------------------------|
-| id          | SERIAL (PK) | Auto increment                   |
-| token       | VARCHAR     | Unique, not null                 |
-| user_id     | INT (FK)    | References `users(id)`           |
-| expired_at  | TIMESTAMP   | Waktu kadaluarsa token           |
-| created_at  | TIMESTAMP   | Default NOW()                    |
-| updated_at  | TIMESTAMP   | Default NOW()                    |
-
-### Tabel `tasks`
-| Kolom        | Tipe        | Keterangan                                      |
-|-------------|-------------|--------------------------------------------------|
-| id          | SERIAL (PK) | Auto increment                                   |
-| user_id     | INT (FK)    | References `users(id)`                           |
-| title       | VARCHAR     | Not null                                         |
-| description | TEXT        | Nullable                                         |
-| status      | VARCHAR     | Enum: `'pending'`, `'in_progress'`, `'completed'` |
-| date        | DATE        | Tanggal task                                     |
-| effort_time | INT         | Dalam menit                                      |
-| created_at  | TIMESTAMP   | Default NOW()                                    |
-| updated_at  | TIMESTAMP   | Default NOW()                                    |
+Fitur ini juga memerlukan penambahan kolom `name` pada tabel `users`.
 
 ---
 
-## 2. Entity (Model)
+## Endpoint
 
-Buat struct Go untuk setiap tabel di folder `internal/entity/`.
-
-#### File yang harus dibuat:
-- `internal/entity/user.go` → struct `User` (mapping ke tabel `users`)
-- `internal/entity/user_token.go` → struct `UserToken` (mapping ke tabel `user_tokens`)
-- `internal/entity/task.go` → struct `Task` (mapping ke tabel `tasks`)
-
----
-
-## 3. Repository Layer
-
-Buat file repository di masing-masing folder fitur. Repository berisi fungsi-fungsi query ke database.
-
-#### File yang harus dibuat:
-- `internal/auth/repository.go` → berisi query terkait auth:
-  - `FindUserByEmail(email string)` → mencari user berdasarkan email
-  - `CreateToken(userID int, token string, expiredAt time.Time)` → menyimpan token baru ke tabel `user_tokens`
-  - `DeleteToken(token string)` → menghapus token dari tabel `user_tokens` (untuk logout)
-  - `FindToken(token string)` → mencari token yang masih valid (belum expired)
-
----
-
-## 4. Service Layer (Business Logic)
-
-Buat file service di folder `internal/auth/`.
-
-#### File yang harus dibuat:
-- `internal/auth/service.go` → berisi logika bisnis:
-  - **Login**: Terima `email` dan `password` → cari user di DB → bandingkan password (gunakan bcrypt) → jika cocok, generate token random → simpan ke tabel `user_tokens` → return token
-  - **Logout**: Terima `token` dari header `Authorization` → hapus token dari tabel `user_tokens`
-
----
-
-## 5. API / Router Layer
-
-Buat file router/handler di folder `internal/auth/`.
-
-#### File yang harus dibuat:
-- `internal/auth/api.go` → berisi HTTP handler dan route registration
-
-### Endpoint Login
-
-```
-POST /api/users/login
-Content-Type: application/json
-```
+### 1. `POST /api/users/register`
 
 **Request Body:**
 ```json
 {
-  "email": "user@example.com",
-  "password": "password123"
+  "name": "name",
+  "email": "email",
+  "password": "password"
 }
 ```
 
-**Response (200 OK):**
+**Response Success (201):**
+```json
+{
+  "data": "Ok"
+}
+```
+
+**Response Error (400 - email sudah terdaftar):**
+```json
+{
+  "error": "Email already registered"
+}
+```
+
+---
+
+### 2. `GET /api/users/info`
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response Success (200):**
 ```json
 {
   "data": {
-    "token": "generated-random-token"
+    "id": 1,
+    "name": "name",
+    "email": "email",
+    "expired_token": "2026-04-01T00:00:00Z"
   }
 }
 ```
 
-**Response (401 Unauthorized):**
+**Response Error (401 - token tidak valid / expired):**
 ```json
 {
   "error": "Unauthorized"
 }
 ```
 
-### Endpoint Logout
+---
 
-```
-POST /api/users/logout
-Authorization: Bearer <token>
-```
+## Tahapan Implementasi
 
-**Response (200 OK):**
-```json
-{
-  "data": "success"
-}
+### Tahap 1: Database Migration
+
+Buat file migration baru `migrations/0002_add_name_to_users.up.sql`:
+```sql
+ALTER TABLE users ADD COLUMN name VARCHAR(255) NOT NULL DEFAULT '';
 ```
 
-**Response (401 Unauthorized):**
-```json
-{
-  "error": "Unauthorized"
-}
+Jalankan migration ke database:
+```bash
+cat migrations/0002_add_name_to_users.up.sql | docker exec -i task-list-timesheet-be-db-1 psql -U postgres -d taskdb
 ```
-
-> **Catatan:** Saat logout berhasil, token yang digunakan harus **dihapus dari tabel `user_tokens`** sehingga tidak bisa digunakan lagi.
 
 ---
 
-## 6. Wiring (Dependency Injection)
+### Tahap 2: Update Entity
 
-Hubungkan semua layer di `cmd/server/main.go`:
-
-1. Buat koneksi database PostgreSQL menggunakan DSN dari config
-2. Inisialisasi `auth.Repository` dengan koneksi DB
-3. Inisialisasi `auth.Service` dengan repository
-4. Register `auth.RegisterHandlers(router)` ke Chi router
+Edit file `internal/entity/user.go`, tambahkan field `Name`:
+```go
+type User struct {
+    ID        int       `json:"id" db:"id"`
+    Name      string    `json:"name" db:"name"`        // <-- TAMBAHKAN INI
+    Email     string    `json:"email" db:"email"`
+    Password  string    `json:"-" db:"password"`
+    CreatedAt time.Time `json:"created_at" db:"created_at"`
+    UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+}
+```
 
 ---
 
-## 7. Tahapan Implementasi (Urutan Kerja)
+### Tahap 3: Update Repository
 
-Ikuti urutan ini agar tidak ada dependency yang terlewat:
+Edit file `internal/repository/auth.go`:
 
-1. **Buat migration SQL** → jalankan di database untuk membuat tabel
-2. **Buat entity** (`user.go`, `user_token.go`, `task.go`)
-3. **Buat koneksi database** di `cmd/server/main.go` (gunakan `database/sql` + `lib/pq` atau `pgx`)
-4. **Buat `internal/auth/repository.go`** → implementasi query ke DB
-5. **Buat `internal/auth/service.go`** → implementasi logika login & logout
-6. **Buat `internal/auth/api.go`** → implementasi handler dan daftarkan route di chi
-7. **Update `cmd/server/main.go`** → wiring repository → service → handler
-8. **Test manual** menggunakan `curl` atau Postman:
-   - Login dengan email & password → pastikan dapat token
-   - Logout dengan token → pastikan token terhapus
+1. **Tambahkan method baru ke interface `AuthRepository`:**
+   ```go
+   CreateUser(ctx context.Context, name, email, hashedPassword string) error
+   FindUserByID(ctx context.Context, id int) (*entity.User, error)
+   ```
 
-## Kriteria Penerimaan (Acceptance Criteria)
-- [ ] Tabel `users`, `user_tokens`, `tasks` berhasil dibuat di database
-- [ ] `POST /api/users/login` mengembalikan token jika email & password benar
-- [ ] `POST /api/users/login` mengembalikan error `401` jika email/password salah
-- [ ] `POST /api/users/logout` menghapus token dari database
-- [ ] Password disimpan dalam bentuk hash (bcrypt), bukan plain text
+2. **Implementasikan kedua method tersebut:**
+   - `CreateUser`: Jalankan query `INSERT INTO users (name, email, password) VALUES ($1, $2, $3)`.
+   - `FindUserByID`: Jalankan query `SELECT id, name, email, created_at, updated_at FROM users WHERE id = $1`.
+
+3. **Update query `FindUserByEmail`** agar juga mengambil kolom `name`:
+   ```sql
+   SELECT id, name, email, password, created_at, updated_at FROM users WHERE email = $1
+   ```
+   dan tambahkan `&user.Name` pada `.Scan(...)`.
+
+---
+
+### Tahap 4: Update Service
+
+Edit file `internal/auth/service.go`:
+
+1. **Tambahkan method baru ke interface `Service`:**
+   ```go
+   Register(ctx context.Context, name, email, password string) error
+   GetUserInfo(ctx context.Context, token string) (*entity.User, time.Time, error)
+   ```
+
+2. **Implementasi `Register`:**
+   - Cek apakah email sudah terdaftar via `repo.FindUserByEmail()`.
+   - Jika sudah ada, return error `"email already registered"`.
+   - Hash password menggunakan `bcrypt.GenerateFromPassword()`.
+   - Simpan user baru via `repo.CreateUser()`.
+
+3. **Implementasi `GetUserInfo`:**
+   - Cari token di database via `repo.FindToken()`.
+   - Jika token tidak ditemukan atau sudah expired, return error `"unauthorized"`.
+   - Ambil data user via `repo.FindUserByID()` menggunakan `userToken.UserID`.
+   - Return data user dan `expiredAt` dari token.
+
+---
+
+### Tahap 5: Update Request Struct
+
+Edit file `internal/auth/request.go`, tambahkan struct baru:
+```go
+type registerRequest struct {
+    Name     string `json:"name"`
+    Email    string `json:"email"`
+    Password string `json:"password"`
+}
+```
+
+---
+
+### Tahap 6: Update API Handler
+
+Edit file `internal/auth/api.go`:
+
+1. **Tambahkan route baru di `RegisterHandlers`:**
+   ```go
+   r.Post("/register", res.register)
+   r.Get("/info", res.getUserInfo)
+   ```
+
+2. **Buat handler `register`:**
+   - Decode request body ke `registerRequest`.
+   - Panggil `service.Register(ctx, req.Name, req.Email, req.Password)`.
+   - Jika error `"email already registered"`, return 400.
+   - Jika sukses, return `{"data": "Ok"}`.
+
+3. **Buat handler `getUserInfo`:**
+   - Ambil token dari header `Authorization: Bearer <token>`.
+   - Panggil `service.GetUserInfo(ctx, token)`.
+   - Jika error `"unauthorized"`, return 401.
+   - Jika sukses, return:
+     ```json
+     {
+       "data": {
+         "id": 1,
+         "name": "name",
+         "email": "email",
+         "expired_token": "2026-04-01T00:00:00Z"
+       }
+     }
+     ```
+
+---
+
+### Tahap 7: Testing
+
+1. **Unit Test**: Tambahkan test case untuk `Register` dan `GetUserInfo` di `internal/auth/service_test.go`.
+2. **Manual Test**: Gunakan `curl` untuk menguji endpoint baru (lihat contoh di `api_testing.md`).
+
+---
+
+## Catatan Penting
+
+- Password harus di-hash menggunakan `bcrypt` sebelum disimpan ke database.
+- Token diambil dari header `Authorization: Bearer <token>`.
+- Gunakan `time.Now()` untuk mengecek apakah token sudah expired.
+- Pastikan semua query yang mengambil data `users` sudah menyertakan kolom `name`.
