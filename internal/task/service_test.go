@@ -49,6 +49,7 @@ func TestCreateTask(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		req := CreateTaskRequest{
 			Title:      "Test Task",
+			Project:    "Project A",
 			UserID:     1,
 			Date:       "2026-04-01",
 			Status:     "pending",

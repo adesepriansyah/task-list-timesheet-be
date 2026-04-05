@@ -35,19 +35,19 @@ func NewTaskRepository(db *sql.DB) TaskRepository {
 }
 
 func (r *taskRepository) Create(ctx context.Context, task *entity.Task) error {
-	query := `INSERT INTO tasks (user_id, title, description, status, date, effort_time)
-              VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at, updated_at`
+	query := `INSERT INTO tasks (user_id, title, description, project, status, date, effort_time)
+              VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at, updated_at`
 	return r.db.QueryRowContext(ctx, query,
-		task.UserID, task.Title, task.Description, task.Status, task.Date, task.EffortTime,
+		task.UserID, task.Title, task.Description, task.Project, task.Status, task.Date, task.EffortTime,
 	).Scan(&task.ID, &task.CreatedAt, &task.UpdatedAt)
 }
 
 func (r *taskRepository) FindByID(ctx context.Context, id int) (*entity.Task, error) {
 	var task entity.Task
-	query := `SELECT id, user_id, title, description, status, date, effort_time, created_at, updated_at
+	query := `SELECT id, user_id, title, description, project, status, date, effort_time, created_at, updated_at
               FROM tasks WHERE id = $1`
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&task.ID, &task.UserID, &task.Title, &task.Description, &task.Status, &task.Date, &task.EffortTime, &task.CreatedAt, &task.UpdatedAt,
+		&task.ID, &task.UserID, &task.Title, &task.Description, &task.Project, &task.Status, &task.Date, &task.EffortTime, &task.CreatedAt, &task.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -60,7 +60,7 @@ func (r *taskRepository) FindByID(ctx context.Context, id int) (*entity.Task, er
 
 func (r *taskRepository) FindAll(ctx context.Context, filter TaskFilter) ([]entity.Task, error) {
 	var tasks []entity.Task
-	query := `SELECT id, user_id, title, description, status, date, effort_time, created_at, updated_at
+	query := `SELECT id, user_id, title, description, project, status, date, effort_time, created_at, updated_at
               FROM tasks WHERE user_id = $1`
 	args := []interface{}{filter.UserID}
 	argID := 2
@@ -94,7 +94,7 @@ func (r *taskRepository) FindAll(ctx context.Context, filter TaskFilter) ([]enti
 	for rows.Next() {
 		var task entity.Task
 		if err := rows.Scan(
-			&task.ID, &task.UserID, &task.Title, &task.Description, &task.Status, &task.Date, &task.EffortTime, &task.CreatedAt, &task.UpdatedAt,
+			&task.ID, &task.UserID, &task.Title, &task.Description, &task.Project, &task.Status, &task.Date, &task.EffortTime, &task.CreatedAt, &task.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -105,10 +105,10 @@ func (r *taskRepository) FindAll(ctx context.Context, filter TaskFilter) ([]enti
 }
 
 func (r *taskRepository) Update(ctx context.Context, task *entity.Task) error {
-	query := `UPDATE tasks SET title=$1, description=$2, status=$3, date=$4, effort_time=$5, updated_at=NOW()
-              WHERE id=$6 AND user_id=$7`
+	query := `UPDATE tasks SET title=$1, description=$2, project=$3, status=$4, date=$5, effort_time=$6, updated_at=NOW()
+              WHERE id=$7 AND user_id=$8`
 	_, err := r.db.ExecContext(ctx, query,
-		task.Title, task.Description, task.Status, task.Date, task.EffortTime, task.ID, task.UserID,
+		task.Title, task.Description, task.Project, task.Status, task.Date, task.EffortTime, task.ID, task.UserID,
 	)
 	return err
 }
